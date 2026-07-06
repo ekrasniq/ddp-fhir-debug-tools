@@ -92,6 +92,15 @@ ITEMTYPE_AGGREGATED = "aggregated"
 ITEMTYPE_LIST = "list"
 ITEMTYPE_DEBUG = "debug"
 INFL_PREFIX = "infl."
+DISEASE_START_DATE = "2022-09-01"
+DISEASE_ICD_CODES = list(cum.INFLUENZA_ICD_CODES)
+DISEASE_POSITIVE_LOINC_CODES = list(cum.INFLUENZA_LOINC_CODES)
+DISEASE_RETRIEVAL_LOINC_CODES = list(DISEASE_POSITIVE_LOINC_CODES)
+INCLUDE_CUMULATIVE_GENDER_ITEM = False
+KNOWN_CONTEXT = (
+    "ddp_cum_items.py/manual search found far more influenza patients than DDP "
+    "infl.cumulative.gender; DDP reported only 6 in the current investigation."
+)
 
 
 def main() -> None:
@@ -101,10 +110,10 @@ def main() -> None:
         cum.search(
             "Observation",
             {
-                "code": ",".join(cum.INFLUENZA_LOINC_CODES),
+                "code": ",".join(DISEASE_RETRIEVAL_LOINC_CODES),
                 "_pretty": "false",
                 "_count": str(BATCH_SIZE),
-                **({"date": "ge" + cum.INFLUENZA_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
+                **({"date": "ge" + DISEASE_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
             },
         )
     )
@@ -114,11 +123,11 @@ def main() -> None:
         cum.search(
             "Condition",
             {
-                "code": ",".join(cum.INFLUENZA_ICD_CODES),
+                "code": ",".join(DISEASE_ICD_CODES),
                 "_pretty": "false",
                 "_count": str(BATCH_SIZE),
                 **(
-                    {"recorded-date": "ge" + cum.INFLUENZA_START_DATE}
+                    {"recorded-date": "ge" + DISEASE_START_DATE}
                     if FILTER_RESOURCES_BY_DATE
                     else {}
                 ),
@@ -154,7 +163,7 @@ def main() -> None:
         {
             "_count": str(BATCH_SIZE),
             **(
-                {"date": "ge" + cum.INFLUENZA_START_DATE + "T00:00:00"}
+                {"date": "ge" + DISEASE_START_DATE + "T00:00:00"}
                 if FILTER_RESOURCES_BY_DATE
                 else {}
             ),
@@ -328,25 +337,25 @@ def main() -> None:
         )
 
     maxtreatment_items_available = supply_contacts_found_for_ddp and locations_found_for_ddp
-    data_items = (
-        build_ddp_maxtreatment_items(
-            current_treatmentlevel_lists,
-            current_maxtreatmentlevel_lists,
-            counts,
-            debug_cases,
-            map_positive_by_class,
-            map_icu,
-            patients,
+    data_items = []
+    if INCLUDE_CUMULATIVE_GENDER_ITEM:
+        data_items.extend(build_cumulative_gender_items(patients, positive_facility_contacts))
+
+    if maxtreatment_items_available:
+        data_items.extend(
+            build_ddp_maxtreatment_items(
+                current_treatmentlevel_lists,
+                current_maxtreatmentlevel_lists,
+                counts,
+                debug_cases,
+                map_positive_by_class,
+                map_icu,
+                patients,
+            )
         )
-        if maxtreatment_items_available
-        else []
-    )
 
     diagnostics = {
-            "known_context": (
-                "ddp_cum_items.py/manual search found far more influenza patients than DDP "
-                "infl.cumulative.gender; DDP reported only 6 in the current investigation."
-            ),
+            "known_context": KNOWN_CONTEXT,
             "counts_before_final_duplicate_removal": counts_before_dedup,
             "ddp_would_exclude_maxtreatment_items": not (
                 supply_contacts_found_for_ddp and locations_found_for_ddp
@@ -586,6 +595,52 @@ def data_item(itemname: str, itemtype: str, data) -> dict:
 
 def infl_label(label: str) -> str:
     return INFL_PREFIX + label
+
+
+def build_cumulative_gender_items(
+    patients: list[dict], positive_facility_contacts: list[dict]
+) -> list[dict]:
+    items = [
+        data_item(
+            infl_label("cumulative.gender"),
+            ITEMTYPE_AGGREGATED,
+            cumulative_gender_counts(patients, positive_facility_contacts),
+        )
+    ]
+    if DDP_DEBUG:
+        items.append(
+            data_item(
+                infl_label("cumulative.gender.debug"),
+                ITEMTYPE_DEBUG,
+                cumulative_gender_patient_ids(patients, positive_facility_contacts),
+            )
+        )
+    return items
+
+
+def cumulative_gender_counts(
+    patients: list[dict], positive_facility_contacts: list[dict]
+) -> dict[str, int]:
+    pids_by_gender = cumulative_gender_patient_ids(patients, positive_facility_contacts)
+    return {gender: len(pids) for gender, pids in pids_by_gender.items()}
+
+
+def cumulative_gender_patient_ids(
+    patients: list[dict], positive_facility_contacts: list[dict]
+) -> dict[str, list[str]]:
+    positive_pids = cum.clean_set(patient_id(e) for e in positive_facility_contacts)
+    patient_by_id = {p.get("id"): p for p in patients if p.get("id")}
+    return {
+        "Male": sorted(
+            pid for pid in positive_pids if cum.matches_gender(patient_by_id.get(pid), "male")
+        ),
+        "Female": sorted(
+            pid for pid in positive_pids if cum.matches_gender(patient_by_id.get(pid), "female")
+        ),
+        "Diverse": sorted(
+            pid for pid in positive_pids if cum.matches_gender(patient_by_id.get(pid), "diverse")
+        ),
+    }
 
 
 def counts_from_level_lists(levels: dict[str, list[dict]], include_outpatient: bool) -> dict[str, int]:
@@ -903,6 +958,9 @@ def configure_shared_module() -> None:
     cum.FHIR_PASSWORD = FHIR_PASSWORD
     cum.BATCH_SIZE = BATCH_SIZE
     cum.ID_CHUNK_SIZE = ID_CHUNK_SIZE
+    cum.INFLUENZA_START_DATE = DISEASE_START_DATE
+    cum.INFLUENZA_ICD_CODES = DISEASE_ICD_CODES
+    cum.INFLUENZA_LOINC_CODES = DISEASE_POSITIVE_LOINC_CODES
     cum.USE_POST_FOR_ID_SEARCH = USE_POST_FOR_ID_SEARCH
     cum.USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS
     cum.FILTER_PATIENT_RETRIEVAL = FILTER_PATIENT_RETRIEVAL

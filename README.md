@@ -15,6 +15,10 @@ Kleine Hilfsskripte zum Nachrechnen von Influenza-DDP-Items gegen einen FHIR-Ser
 Maxtreatment-Items als DDP-aehnliche `DiseaseDataItem`-Liste aus, also mit
 `itemname`, `itemtype` und `data`.
 
+`ddp_covid_items.py` nutzt dieselbe Maxtreatment-Logik fuer COVID und gibt
+`cumulative.gender` plus die COVID-Maxtreatment-Items aus. COVID-Itemnamen sind
+wie im DDP nicht mit `infl.` geprefixt.
+
 ## Nutzung
 
 Im jeweiligen Skript oben diese Werte setzen:
@@ -37,6 +41,12 @@ Fuer Maxtreatment:
 python .\ddp_infl_maxtreatment_items.py
 ```
 
+Fuer COVID cumulative gender und Maxtreatment:
+
+```powershell
+python .\ddp_covid_items.py
+```
+
 ## Wichtige Schalter
 
 ```python
@@ -56,7 +66,7 @@ MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 
 ## Maxtreatment-Schalter
 
-In `ddp_infl_maxtreatment_items.py` sind zusaetzlich diese DDP-Defaults gesetzt:
+In `ddp_infl_maxtreatment_items.py` und `ddp_covid_items.py` sind zusaetzlich diese DDP-Defaults gesetzt:
 
 ```python
 USE_PART_OF_INSTEAD_OF_IDENTIFIER = False
