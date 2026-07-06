@@ -1221,6 +1221,14 @@ def is_valid_procedure(procedure: dict) -> bool:
     return bool(status) and status not in PROCEDURE_INVALID_STATUS
 
 
+def is_active(encounter: dict) -> bool:
+    return encounter.get("status") == "in-progress"
+
+
+def is_active_procedure(procedure: dict) -> bool:
+    return procedure.get("status") == "in-progress"
+
+
 def is_vent_procedure(procedure: dict) -> bool:
     return procedure_code_matches(procedure, set(PROCEDURE_VENTILATION_CODES))
 
@@ -1273,6 +1281,15 @@ def class_code(encounter: dict) -> str | None:
 
 def is_icu_case(encounter: dict, icu_location_ids: set[str]) -> bool:
     return any(loc_id in icu_location_ids for loc_id in encounter_location_ids(encounter))
+
+
+def is_currently_on_icu_ward(encounter: dict, icu_location_ids: set[str]) -> bool:
+    for loc in encounter.get("location", []):
+        loc_id = cum.ref_id(loc.get("location"))
+        period = loc.get("period")
+        if loc_id in icu_location_ids and period and not period.get("end"):
+            return True
+    return False
 
 
 def encounter_location_ids(encounter: dict) -> list[str]:
