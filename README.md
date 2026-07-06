@@ -11,10 +11,9 @@ Kleine Hilfsskripte zum Nachrechnen von Influenza-DDP-Items gegen einen FHIR-Ser
 - optionaler Condition-Link ueber `Encounter.diagnosis.condition`
 - Zaehlen von `Male`, `Female`, `Diverse` ueber positiv markierte Einrichtungskontakte
 
-`ddp_infl_maxtreatment_items.py` nutzt dieselbe Influenza-Kohorte und rechnet
-`infl.cumulative.maxtreatmentlevel` nach. Das Skript gibt zusaetzlich Debug-Zaehler fuer
-Supply-Kontakte, Locations, ICU-Dummy-Location, Procedures, VN-Flagging, `period.start` und
-die finale Deduplikation ueber Treatmentlevel hinweg aus.
+`ddp_infl_maxtreatment_items.py` nutzt dieselbe Influenza-Kohorte und gibt die
+Maxtreatment-Items als DDP-aehnliche `DiseaseDataItem`-Liste aus, also mit
+`itemname`, `itemtype` und `data`.
 
 ## Nutzung
 
@@ -63,6 +62,8 @@ In `ddp_infl_maxtreatment_items.py` sind zusaetzlich diese DDP-Defaults gesetzt:
 USE_PART_OF_INSTEAD_OF_IDENTIFIER = False
 USE_ICU_UNDIFFERENTIATED = False
 CHECK_PROCEDURES_ICU_STAYS = True
+DDP_DEBUG = False
+INCLUDE_DIAGNOSTICS = False
 ICU_SERVICE_PROVIDER_IDS = set()
 ADDITIONAL_ICU_LOCATION_IDS = set()
 ```
@@ -72,6 +73,10 @@ Wenn der DDP ICU ueber `Encounter.serviceProvider` erkennt, hier dieselben Werte
 
 `ADDITIONAL_ICU_LOCATION_IDS` ist nur ein Debug-Override, falls Location-Ressourcen nicht per
 `Location?_id=...` geladen werden koennen.
+
+Mit `DDP_DEBUG = True` werden zusaetzlich die DDP-Debug-Items `*.debug` erzeugt.
+Mit `INCLUDE_DIAGNOSTICS = True` wird die Ausgabe in `{ "data_items": ..., "diagnostics": ... }`
+gepackt und enthaelt die internen Zwischenzaehler.
 
 ## Debug-Ausgabe
 
@@ -87,7 +92,8 @@ Der JSON-Output enthaelt neben dem Item auch Debug-Zaehler, u.a.:
 
 Damit laesst sich nachvollziehen, an welcher DDP-Logik Patienten verloren gehen.
 
-Beim Maxtreatment-Skript sind besonders diese Felder relevant:
+Beim Maxtreatment-Skript sind diese Felder nur sichtbar, wenn `INCLUDE_DIAGNOSTICS = True`
+gesetzt ist:
 
 - `ddp_would_exclude_maxtreatment_items`
 - `supply_contacts_loaded_inpatient_or_shortstay`

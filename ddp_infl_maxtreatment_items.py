@@ -27,6 +27,11 @@ MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 USE_PART_OF_INSTEAD_OF_IDENTIFIER = False
 USE_ICU_UNDIFFERENTIATED = False
 CHECK_PROCEDURES_ICU_STAYS = True
+DDP_DEBUG = False
+
+# Default is the DDP-like DiseaseDataItem list. Set this to True if you also need the
+# intermediate counters that explain where cases are lost.
+INCLUDE_DIAGNOSTICS = False
 
 # Same idea as global.service-provider-identifier-of-icu-locations.
 # Fill with serviceProvider reference IDs or serviceProvider.identifier.value values.
@@ -83,6 +88,10 @@ ICU_VENTILATION = "ICU_with_ventilation"
 ICU_ECMO = "ICU_with_ecmo"
 ICU_UNDIFF = "ICU_undifferentiated"
 INPATIENT = "Stationary"
+ITEMTYPE_AGGREGATED = "aggregated"
+ITEMTYPE_LIST = "list"
+ITEMTYPE_DEBUG = "debug"
+INFL_PREFIX = "infl."
 
 
 def main() -> None:
@@ -249,6 +258,20 @@ def main() -> None:
         flagged_encounter_ids,
     )
 
+    current_icu_map = create_current_icu_map(map_icu)
+    current_treatmentlevel_lists = create_current_treatmentlevel_lists(
+        current_icu_map,
+        icu_supply_contacts,
+        facility_contacts,
+        procedures,
+        icu_location_ids,
+        flagged_encounter_ids,
+        supply_to_facility_map,
+    )
+    current_maxtreatmentlevel_lists = create_current_maxtreatmentlevel_lists(
+        map_icu, facility_contacts, flagged_encounter_ids
+    )
+
     cumulative_outpatient = get_cumulative_by_class(OUTPATIENT, map_positive_by_class, map_icu)
     cumulative_normal_ward = get_cumulative_by_class(INPATIENT, map_positive_by_class, map_icu)
     if USE_ICU_UNDIFFERENTIATED:
@@ -304,9 +327,22 @@ def main() -> None:
             }
         )
 
-    output = {
-        "infl.cumulative.maxtreatmentlevel": counts,
-        "debug": {
+    maxtreatment_items_available = supply_contacts_found_for_ddp and locations_found_for_ddp
+    data_items = (
+        build_ddp_maxtreatment_items(
+            current_treatmentlevel_lists,
+            current_maxtreatmentlevel_lists,
+            counts,
+            debug_cases,
+            map_positive_by_class,
+            map_icu,
+            patients,
+        )
+        if maxtreatment_items_available
+        else []
+    )
+
+    diagnostics = {
             "known_context": (
                 "ddp_cum_items.py/manual search found far more influenza patients than DDP "
                 "infl.cumulative.gender; DDP reported only 6 in the current investigation."
@@ -414,10 +450,451 @@ def main() -> None:
             "use_post_for_id_search": USE_POST_FOR_ID_SEARCH,
             "batch_size": BATCH_SIZE,
             "id_chunk_size": ID_CHUNK_SIZE,
-        },
-        "debug_case_ids_by_treatmentlevel": debug_cases,
     }
+    output = {"data_items": data_items, "diagnostics": diagnostics} if INCLUDE_DIAGNOSTICS else data_items
     print(json.dumps(output, indent=2, ensure_ascii=False))
+
+
+def build_ddp_maxtreatment_items(
+    current_treatmentlevel_lists: dict[str, list[dict]],
+    current_maxtreatmentlevel_lists: dict[str, list[dict]],
+    cumulative_counts: dict[str, int],
+    cumulative_debug_cases: dict[str, dict[str, list[str]]],
+    map_positive_by_class: dict[str, list[dict]],
+    map_icu: dict[str, list[dict]],
+    patients: list[dict],
+) -> list[dict]:
+    items = [
+        data_item(
+            infl_label("current.treatmentlevel"),
+            ITEMTYPE_AGGREGATED,
+            counts_from_level_lists(current_treatmentlevel_lists, include_outpatient=False),
+        )
+    ]
+    if DDP_DEBUG:
+        items.append(
+            data_item(
+                infl_label("current.treatmentlevel.debug"),
+                ITEMTYPE_DEBUG,
+                case_id_map_from_level_lists(current_treatmentlevel_lists),
+            )
+        )
+
+    items.append(
+        data_item(
+            infl_label("current.maxtreatmentlevel"),
+            ITEMTYPE_AGGREGATED,
+            counts_from_level_lists(current_maxtreatmentlevel_lists, include_outpatient=False),
+        )
+    )
+    if DDP_DEBUG:
+        items.append(
+            data_item(
+                infl_label("current.maxtreatmentlevel.debug"),
+                ITEMTYPE_DEBUG,
+                case_id_map_from_level_lists(current_maxtreatmentlevel_lists),
+            )
+        )
+
+    items.append(
+        data_item(
+            infl_label("current.age.maxtreatmentlevel.normal_ward"),
+            ITEMTYPE_LIST,
+            current_max_age_list(
+                current_maxtreatmentlevel_lists.get(NORMAL_WARD, []),
+                map_positive_by_class,
+                patients,
+            ),
+        )
+    )
+    if USE_ICU_UNDIFFERENTIATED:
+        items.append(
+            data_item(
+                infl_label("current.age.maxtreatmentlevel.icu_undifferentiated"),
+                ITEMTYPE_LIST,
+                current_max_age_list(
+                    current_maxtreatmentlevel_lists.get(ICU_UNDIFF, []),
+                    map_positive_by_class,
+                    patients,
+                ),
+            )
+        )
+    else:
+        for label, level in [
+            ("current.age.maxtreatmentlevel.icu", ICU),
+            ("current.age.maxtreatmentlevel.icu_with_ventilation", ICU_VENTILATION),
+            ("current.age.maxtreatmentlevel.icu_with_ecmo", ICU_ECMO),
+        ]:
+            items.append(
+                data_item(
+                    infl_label(label),
+                    ITEMTYPE_LIST,
+                    current_max_age_list(
+                        current_maxtreatmentlevel_lists.get(level, []),
+                        map_positive_by_class,
+                        patients,
+                    ),
+                )
+            )
+
+    items.append(
+        data_item(
+            infl_label("cumulative.maxtreatmentlevel"),
+            ITEMTYPE_AGGREGATED,
+            cumulative_counts,
+        )
+    )
+    if DDP_DEBUG:
+        items.append(
+            data_item(
+                infl_label("cumulative.maxtreatmentlevel.debug"),
+                ITEMTYPE_DEBUG,
+                cumulative_debug_cases,
+            )
+        )
+
+    cumulative_age_labels = [
+        ("cumulative.age.maxtreatmentlevel.outpatient", OUTPATIENT),
+        ("cumulative.age.maxtreatmentlevel.normal_ward", NORMAL_WARD),
+    ]
+    if USE_ICU_UNDIFFERENTIATED:
+        cumulative_age_labels.append(
+            ("cumulative.age.maxtreatmentlevel.icu_undifferentiated", ICU_UNDIFF)
+        )
+    else:
+        cumulative_age_labels.extend(
+            [
+                ("cumulative.age.maxtreatmentlevel.icu", ICU),
+                ("cumulative.age.maxtreatmentlevel.icu_with_ventilation", ICU_VENTILATION),
+                ("cumulative.age.maxtreatmentlevel.icu_with_ecmo", ICU_ECMO),
+            ]
+        )
+    for item_label, level in cumulative_age_labels:
+        items.append(
+            data_item(
+                infl_label(item_label),
+                ITEMTYPE_LIST,
+                cumulative_max_age_list(level, map_positive_by_class, map_icu, patients),
+            )
+        )
+    return items
+
+
+def data_item(itemname: str, itemtype: str, data) -> dict:
+    return {"itemname": itemname, "itemtype": itemtype, "data": data}
+
+
+def infl_label(label: str) -> str:
+    return INFL_PREFIX + label
+
+
+def counts_from_level_lists(levels: dict[str, list[dict]], include_outpatient: bool) -> dict[str, int]:
+    keys = [NORMAL_WARD]
+    if include_outpatient:
+        keys.insert(0, OUTPATIENT)
+    if USE_ICU_UNDIFFERENTIATED:
+        keys.append(ICU_UNDIFF)
+    else:
+        keys.extend([ICU, ICU_VENTILATION, ICU_ECMO])
+    return {key: len(levels.get(key, [])) for key in keys}
+
+
+def case_id_map_from_level_lists(levels: dict[str, list[dict]]) -> dict[str, list[str]]:
+    return {
+        key: [e.get("id") for e in levels.get(key, []) if e.get("id")]
+        for key in counts_from_level_lists(levels, include_outpatient=False)
+    }
+
+
+def create_current_icu_map(map_icu: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    if USE_ICU_UNDIFFERENTIATED:
+        return {ICU_UNDIFF: [e for e in map_icu.get(ICU_UNDIFF, []) if is_active(e)]}
+    return {
+        ICU: [e for e in map_icu.get(ICU, []) if is_active(e)],
+        ICU_VENTILATION: [e for e in map_icu.get(ICU_VENTILATION, []) if is_active(e)],
+        ICU_ECMO: [e for e in map_icu.get(ICU_ECMO, []) if is_active(e)],
+    }
+
+
+def create_current_treatmentlevel_lists(
+    current_icu_map: dict[str, list[dict]],
+    icu_supply_contacts: list[dict],
+    facility_contacts: list[dict],
+    procedures: list[dict],
+    icu_location_ids: set[str],
+    flagged_encounter_ids: set[str],
+    supply_to_facility_map: dict[str, str],
+) -> dict[str, list[dict]]:
+    positive_currently_on_icu_supply = [
+        s
+        for s in icu_supply_contacts
+        if s.get("id") in flagged_encounter_ids
+        and is_active(s)
+        and is_currently_on_icu_ward(s, icu_location_ids)
+    ]
+    current_icu_facility_ids = cum.clean_set(
+        facility_contact_id(s, supply_to_facility_map) for s in positive_currently_on_icu_supply
+    )
+    active_vent_facility_ids = {
+        procedure_case_id(p)
+        for p in procedures
+        if procedure_case_id(p) and is_vent_procedure(p) and is_active_procedure(p)
+    }
+    active_ecmo_facility_ids = {
+        procedure_case_id(p)
+        for p in procedures
+        if procedure_case_id(p) and is_ecmo_procedure(p) and is_active_procedure(p)
+    }
+    active_positive_facility = [
+        e
+        for e in facility_contacts
+        if e.get("id") in flagged_encounter_ids and is_inpatient_or_shortstay(e) and is_active(e)
+    ]
+
+    if USE_ICU_UNDIFFERENTIATED:
+        return {
+            NORMAL_WARD: [
+                e for e in active_positive_facility if e.get("id") not in current_icu_facility_ids
+            ],
+            ICU_UNDIFF: positive_currently_on_icu_supply,
+        }
+
+    current_icu_facility = [
+        e for e in current_icu_map.get(ICU, []) if e.get("id") in current_icu_facility_ids
+    ]
+    current_vent = [
+        e for e in current_icu_map.get(ICU_VENTILATION, []) if e.get("id") in active_vent_facility_ids
+    ]
+    current_ecmo = [
+        e for e in current_icu_map.get(ICU_ECMO, []) if e.get("id") in active_ecmo_facility_ids
+    ]
+    return {
+        NORMAL_WARD: [
+            e
+            for e in active_positive_facility
+            if e.get("id") not in current_icu_facility_ids
+            and e.get("id") not in active_vent_facility_ids
+            and e.get("id") not in active_ecmo_facility_ids
+        ],
+        ICU: [
+            e
+            for e in current_icu_facility
+            if e.get("id") not in active_vent_facility_ids
+            and e.get("id") not in active_ecmo_facility_ids
+        ],
+        ICU_VENTILATION: [e for e in current_vent if e.get("id") not in active_ecmo_facility_ids],
+        ICU_ECMO: current_ecmo,
+    }
+
+
+def create_current_maxtreatmentlevel_lists(
+    map_icu: dict[str, list[dict]], facility_contacts: list[dict], flagged_encounter_ids: set[str]
+) -> dict[str, list[dict]]:
+    active_positive_facility = [
+        e
+        for e in facility_contacts
+        if e.get("id") in flagged_encounter_ids and is_inpatient_or_shortstay(e) and is_active(e)
+    ]
+    if USE_ICU_UNDIFFERENTIATED:
+        icu_undiff_ids = {e.get("id") for e in map_icu.get(ICU_UNDIFF, [])}
+        return {
+            NORMAL_WARD: [e for e in active_positive_facility if e.get("id") not in icu_undiff_ids],
+            ICU_UNDIFF: [e for e in active_positive_facility if e.get("id") in icu_undiff_ids],
+        }
+
+    icu_ids = {e.get("id") for e in map_icu.get(ICU, [])}
+    vent_ids = {e.get("id") for e in map_icu.get(ICU_VENTILATION, [])}
+    ecmo_ids = {e.get("id") for e in map_icu.get(ICU_ECMO, [])}
+    return {
+        NORMAL_WARD: [
+            e
+            for e in active_positive_facility
+            if e.get("id") not in icu_ids | vent_ids | ecmo_ids
+        ],
+        ICU: [
+            e
+            for e in active_positive_facility
+            if e.get("id") in icu_ids and e.get("id") not in vent_ids | ecmo_ids
+        ],
+        ICU_VENTILATION: [
+            e
+            for e in active_positive_facility
+            if e.get("id") in vent_ids and e.get("id") not in ecmo_ids
+        ],
+        ICU_ECMO: [e for e in active_positive_facility if e.get("id") in ecmo_ids],
+    }
+
+
+def current_max_age_list(
+    current_max_encounters: list[dict],
+    map_positive_by_class: dict[str, list[dict]],
+    patients: list[dict],
+) -> list[int]:
+    patient_ids = {patient_id(e) for e in current_max_encounters}
+    pid_admission: dict[str, dict] = {}
+    for encounter_list in map_positive_by_class.values():
+        for encounter in encounter_list:
+            if patient_id(encounter) in patient_ids:
+                assign_first_admission_date_to_pid(encounter, pid_admission)
+    patient_by_id = {p.get("id"): p for p in patients if p.get("id")}
+    ages = [
+        age_group_for_patient(patient_by_id.get(pid), encounter)
+        for pid, encounter in pid_admission.items()
+    ]
+    return sorted(age for age in ages if age is not None)
+
+
+def cumulative_max_age_list(
+    treatment_level: str,
+    map_positive_by_class: dict[str, list[dict]],
+    map_icu: dict[str, list[dict]],
+    patients: list[dict],
+) -> list[int]:
+    outpatient_pids = pid_set(map_positive_by_class.get(OUTPATIENT, []))
+    inpatient_pids = pid_set(map_positive_by_class.get(INPATIENT, []))
+    icu_undiff_pids = pid_set(map_icu.get(ICU_UNDIFF, [])) if USE_ICU_UNDIFFERENTIATED else set()
+    icu_pids = pid_set(map_icu.get(ICU, [])) if not USE_ICU_UNDIFFERENTIATED else set()
+    vent_pids = pid_set(map_icu.get(ICU_VENTILATION, [])) if not USE_ICU_UNDIFFERENTIATED else set()
+    ecmo_pids = pid_set(map_icu.get(ICU_ECMO, [])) if not USE_ICU_UNDIFFERENTIATED else set()
+
+    encounters_overall = encounter_union(
+        map_positive_by_class.get(OUTPATIENT, []),
+        map_positive_by_class.get(INPATIENT, []),
+        map_icu.get(ICU_UNDIFF, []) if USE_ICU_UNDIFFERENTIATED else [],
+        map_icu.get(ICU, []) if not USE_ICU_UNDIFFERENTIATED else [],
+        map_icu.get(ICU_VENTILATION, []) if not USE_ICU_UNDIFFERENTIATED else [],
+        map_icu.get(ICU_ECMO, []) if not USE_ICU_UNDIFFERENTIATED else [],
+    )
+    pid_admission: dict[str, dict] = {}
+    for encounter in encounters_overall:
+        assign_first_admission_date_to_pid(encounter, pid_admission)
+
+    patient_by_id = {p.get("id"): p for p in patients if p.get("id")}
+    ages: list[int] = []
+    for pid, encounter in pid_admission.items():
+        if has_higher_treatment_level(
+            pid, treatment_level, inpatient_pids, icu_undiff_pids, icu_pids, vent_pids, ecmo_pids
+        ):
+            continue
+        if is_patient_eligible_for_level(
+            pid, treatment_level, outpatient_pids, inpatient_pids, icu_undiff_pids, icu_pids, vent_pids, ecmo_pids
+        ):
+            age_group = age_group_for_patient(patient_by_id.get(pid), encounter)
+            if age_group is not None:
+                ages.append(age_group)
+    return sorted(ages)
+
+
+def has_higher_treatment_level(
+    patient_id_value: str,
+    treatment_level: str,
+    inpatient_pids: set[str],
+    icu_undiff_pids: set[str],
+    icu_pids: set[str],
+    vent_pids: set[str],
+    ecmo_pids: set[str],
+) -> bool:
+    has_icu = (
+        patient_id_value in icu_undiff_pids
+        if USE_ICU_UNDIFFERENTIATED
+        else patient_id_value in icu_pids | vent_pids | ecmo_pids
+    )
+    if treatment_level == OUTPATIENT:
+        return patient_id_value in inpatient_pids or has_icu
+    if treatment_level == NORMAL_WARD:
+        return has_icu
+    if treatment_level == ICU:
+        return patient_id_value in vent_pids or patient_id_value in ecmo_pids
+    if treatment_level == ICU_VENTILATION:
+        return patient_id_value in ecmo_pids
+    return False
+
+
+def is_patient_eligible_for_level(
+    patient_id_value: str,
+    treatment_level: str,
+    outpatient_pids: set[str],
+    inpatient_pids: set[str],
+    icu_undiff_pids: set[str],
+    icu_pids: set[str],
+    vent_pids: set[str],
+    ecmo_pids: set[str],
+) -> bool:
+    return (
+        (treatment_level == OUTPATIENT and patient_id_value in outpatient_pids)
+        or (treatment_level == NORMAL_WARD and patient_id_value in inpatient_pids)
+        or (treatment_level == ICU and patient_id_value in icu_pids)
+        or (treatment_level == ICU_VENTILATION and patient_id_value in vent_pids)
+        or (treatment_level == ICU_ECMO and patient_id_value in ecmo_pids)
+        or (treatment_level == ICU_UNDIFF and patient_id_value in icu_undiff_pids)
+    )
+
+
+def encounter_union(*encounter_lists: list[dict]) -> list[dict]:
+    by_id: dict[str, dict] = {}
+    no_id: list[dict] = []
+    for encounter_list in encounter_lists:
+        for encounter in encounter_list:
+            if encounter.get("id"):
+                by_id.setdefault(encounter["id"], encounter)
+            else:
+                no_id.append(encounter)
+    return list(by_id.values()) + no_id
+
+
+def assign_first_admission_date_to_pid(encounter: dict, pid_admission: dict[str, dict]) -> None:
+    pid = patient_id(encounter)
+    start = period_start(encounter)
+    if not pid or not start:
+        return
+    previous = pid_admission.get(pid)
+    if previous is None or start < period_start(previous):
+        pid_admission[pid] = encounter
+
+
+def age_group_for_patient(patient: dict | None, encounter: dict) -> int | None:
+    if not patient or not patient.get("birthDate") or not period_start(encounter):
+        return None
+    birth_date = parse_fhir_date(patient["birthDate"])
+    if birth_date is None:
+        return None
+    age = calculate_age_years(birth_date, period_start(encounter).date())
+    return check_age_group(age)
+
+
+def parse_fhir_date(value: str):
+    for candidate in (value, value + "-01" if len(value) == 7 else None, value + "-01-01" if len(value) == 4 else None):
+        if not candidate:
+            continue
+        try:
+            return datetime.fromisoformat(candidate).date()
+        except ValueError:
+            continue
+    return None
+
+
+def calculate_age_years(birth_date, case_date) -> int:
+    age = case_date.year - birth_date.year
+    if (case_date.month, case_date.day) < (birth_date.month, birth_date.day):
+        age -= 1
+    return age
+
+
+def check_age_group(age: int) -> int:
+    if age < 0:
+        raise ValueError("Age cannot be negative.")
+    if age <= 19:
+        return 0
+    if age >= 90:
+        return 90
+    if age < 50:
+        for start in range(20, 50, 5):
+            if age <= start + 4:
+                return start
+    for start in range(50, 90, 5):
+        if age <= start + 4:
+            return start
+    raise ValueError(f"Unexpected age value: {age}")
 
 
 def configure_shared_module() -> None:
