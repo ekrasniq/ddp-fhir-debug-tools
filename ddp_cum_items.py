@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate infl.cumulative.gender with the DDP v0.5.7 FHIR logic."""
+"""Generate one DDP-like cumulative.gender item from FHIR resources.
+
+This module defaults to influenza for backwards compatibility. Use
+ddp_infl_cumulative_items.py or ddp_covid_cumulative_items.py as the clearer entry points.
+"""
 
 from __future__ import annotations
 
@@ -46,6 +50,12 @@ INFLUENZA_LOINC_CODES = """
 92809-3,92976-0,92977-8,94394-4,94395-1,94396-9,95658-1,99623-1
 """.replace("\n", "").replace(" ", "").split(",")
 
+DISEASE_START_DATE = INFLUENZA_START_DATE
+DISEASE_ICD_CODES = list(INFLUENZA_ICD_CODES)
+DISEASE_POSITIVE_LOINC_CODES = list(INFLUENZA_LOINC_CODES)
+DISEASE_RETRIEVAL_LOINC_CODES = list(DISEASE_POSITIVE_LOINC_CODES)
+OUTPUT_ITEM_NAME = "infl.cumulative.gender"
+
 POSITIVE_VALUE_CODES = {"10828004", "260373001", "52101004"}
 POSITIVE_INTERPRETATION_CODES = {"POS", "DET"}
 VALID_ENCOUNTER_STATUS = {"in-progress", "finished"}
@@ -57,10 +67,10 @@ def main() -> None:
         search(
             "Observation",
             {
-                "code": ",".join(INFLUENZA_LOINC_CODES),
+                "code": ",".join(DISEASE_RETRIEVAL_LOINC_CODES),
                 "_pretty": "false",
                 "_count": str(BATCH_SIZE),
-                **({"date": "ge" + INFLUENZA_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
+                **({"date": "ge" + DISEASE_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
             },
         )
     )
@@ -70,11 +80,11 @@ def main() -> None:
         search(
             "Condition",
             {
-                "code": ",".join(INFLUENZA_ICD_CODES),
+                "code": ",".join(DISEASE_ICD_CODES),
                 "_pretty": "false",
                 "_count": str(BATCH_SIZE),
                 **(
-                    {"recorded-date": "ge" + INFLUENZA_START_DATE}
+                    {"recorded-date": "ge" + DISEASE_START_DATE}
                     if FILTER_RESOURCES_BY_DATE
                     else {}
                 ),
@@ -112,7 +122,7 @@ def main() -> None:
         {
             "_count": str(BATCH_SIZE),
             **(
-                {"date": "ge" + INFLUENZA_START_DATE + "T00:00:00"}
+                {"date": "ge" + DISEASE_START_DATE + "T00:00:00"}
                 if FILTER_RESOURCES_BY_DATE
                 else {}
             ),
@@ -163,7 +173,7 @@ def main() -> None:
     }
 
     output = {
-        "infl.cumulative.gender": {gender: len(pids) for gender, pids in pids_by_gender.items()},
+        OUTPUT_ITEM_NAME: {gender: len(pids) for gender, pids in pids_by_gender.items()},
         "debug": {
             "observations_raw": len(observations_raw),
             "observations_after_status_filter": len(observations),
@@ -285,11 +295,11 @@ def is_valid_encounter(encounter: dict) -> bool:
 
 
 def is_influenza_observation(obs: dict) -> bool:
-    return has_code(obs.get("code"), LOINC_SYSTEM, set(INFLUENZA_LOINC_CODES))
+    return has_code(obs.get("code"), LOINC_SYSTEM, set(DISEASE_POSITIVE_LOINC_CODES))
 
 
 def is_influenza_condition(condition: dict) -> bool:
-    return has_code(condition.get("code"), ICD_SYSTEM, set(INFLUENZA_ICD_CODES))
+    return has_code(condition.get("code"), ICD_SYSTEM, set(DISEASE_ICD_CODES))
 
 
 def condition_encounter_id(condition: dict, linked_encounters: dict[str, str]) -> str | None:

@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Generate infl.cumulative.gender with DDP-like FHIR logic."""
+
+from __future__ import annotations
+
+import ddp_cum_items as cum
+
+
+# Set these values for your FHIR endpoint.
+FHIR_BASE_URL = "http://localhost:8080/fhir"
+FHIR_USER = "user"
+FHIR_PASSWORD = "password"
+
+BATCH_SIZE = 500
+ID_CHUNK_SIZE = 50
+USE_POST_FOR_ID_SEARCH = True
+USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = True
+FILTER_PATIENT_RETRIEVAL = True
+FILTER_RESOURCES_BY_DATE = True
+MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
+
+
+def main() -> None:
+    cum.FHIR_BASE_URL = FHIR_BASE_URL
+    cum.FHIR_USER = FHIR_USER
+    cum.FHIR_PASSWORD = FHIR_PASSWORD
+    cum.BATCH_SIZE = BATCH_SIZE
+    cum.ID_CHUNK_SIZE = ID_CHUNK_SIZE
+    cum.USE_POST_FOR_ID_SEARCH = USE_POST_FOR_ID_SEARCH
+    cum.USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS
+    cum.FILTER_PATIENT_RETRIEVAL = FILTER_PATIENT_RETRIEVAL
+    cum.FILTER_RESOURCES_BY_DATE = FILTER_RESOURCES_BY_DATE
+    cum.MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = MIMIC_DDP_OBS_INTERPRETATION_REMOVAL
+
+    cum.DISEASE_START_DATE = cum.INFLUENZA_START_DATE
+    cum.DISEASE_ICD_CODES = list(cum.INFLUENZA_ICD_CODES)
+    cum.DISEASE_POSITIVE_LOINC_CODES = list(cum.INFLUENZA_LOINC_CODES)
+    cum.DISEASE_RETRIEVAL_LOINC_CODES = list(cum.DISEASE_POSITIVE_LOINC_CODES)
+    cum.OUTPUT_ITEM_NAME = "infl.cumulative.gender"
+
+    cum.main()
+
+
+if __name__ == "__main__":
+    main()

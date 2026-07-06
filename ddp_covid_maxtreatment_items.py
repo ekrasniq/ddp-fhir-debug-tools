@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate COVID cumulative.gender and maxtreatmentlevel items with DDP-like FHIR logic."""
+"""Generate COVID maxtreatmentlevel items with DDP-like FHIR logic."""
 
 from __future__ import annotations
 
@@ -76,10 +76,10 @@ def main() -> None:
     items.DISEASE_START_DATE = COVID_START_DATE
     items.DISEASE_ICD_CODES = list(COVID_ICD_CODES)
     items.DISEASE_POSITIVE_LOINC_CODES = list(COVID_PCR_LOINC_CODES)
+    # DDP retrieval loads PCR and variant LOINCs, but positive detection uses PCR LOINCs.
     items.DISEASE_RETRIEVAL_LOINC_CODES = list(COVID_PCR_LOINC_CODES + COVID_VARIANT_LOINC_CODES)
-    items.INCLUDE_CUMULATIVE_GENDER_ITEM = True
     items.KNOWN_CONTEXT = (
-        "COVID DDP-like debug run. Retrieval includes COVID PCR and variant LOINCs, "
+        "COVID DDP-like maxtreatment debug run. Retrieval includes COVID PCR and variant LOINCs, "
         "but positive case detection uses PCR LOINCs only, matching the DDP logic."
     )
 

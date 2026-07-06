@@ -1,23 +1,28 @@
 # DDP FHIR Debug Tools
 
-Kleine Hilfsskripte zum Nachrechnen von Influenza-DDP-Items gegen einen FHIR-Server.
+Kleine Hilfsskripte zum Nachrechnen von COVID- und Influenza-DDP-Items gegen einen FHIR-Server.
 
-`ddp_cum_items.py` bildet die DDP-v0.5.7-Logik fuer `infl.cumulative.gender` nach:
+Es gibt vier klare Einstiegsskripte:
 
-- Influenza-Observations per LOINC ab `2022-09-01`
-- Influenza-Conditions per ICD `J10.0`, `J10.1`, `J10.8`, `J09`
+- `ddp_covid_cumulative_items.py`: COVID `cumulative.gender`
+- `ddp_covid_maxtreatment_items.py`: COVID Maxtreatment-Items
+- `ddp_infl_cumulative_items.py`: Influenza `infl.cumulative.gender`
+- `ddp_infl_maxtreatment_items.py`: Influenza Maxtreatment-Items
+
+`ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
+
+Die Cumulative-Skripte bilden die DDP-v0.5.7-Logik fuer `cumulative.gender` nach:
+
+- Observations per DDP-LOINC ab dem jeweiligen DDP-Startdatum
+- Conditions per DDP-ICD
 - Patient- und Encounter-Retrieval wie im DDP
 - positives Encounter-Flagging ueber `Encounter.identifier` Slice `VN`
 - optionaler Condition-Link ueber `Encounter.diagnosis.condition`
 - Zaehlen von `Male`, `Female`, `Diverse` ueber positiv markierte Einrichtungskontakte
 
-`ddp_infl_maxtreatment_items.py` nutzt dieselbe Influenza-Kohorte und gibt die
-Maxtreatment-Items als DDP-aehnliche `DiseaseDataItem`-Liste aus, also mit
-`itemname`, `itemtype` und `data`.
-
-`ddp_covid_items.py` nutzt dieselbe Maxtreatment-Logik fuer COVID und gibt
-`cumulative.gender` plus die COVID-Maxtreatment-Items aus. COVID-Itemnamen sind
-wie im DDP nicht mit `infl.` geprefixt.
+Die Maxtreatment-Skripte geben die Items als DDP-aehnliche `DiseaseDataItem`-Liste aus,
+also mit `itemname`, `itemtype` und `data`. COVID-Itemnamen sind wie im DDP nicht
+geprefixt; Influenza-Itemnamen tragen `infl.`.
 
 ## Nutzung
 
@@ -29,22 +34,13 @@ FHIR_USER = "user"
 FHIR_PASSWORD = "password"
 ```
 
-Dann ausfuehren:
+Dann eines der vier Skripte ausfuehren:
 
 ```powershell
-python .\ddp_cum_items.py
-```
-
-Fuer Maxtreatment:
-
-```powershell
+python .\ddp_covid_cumulative_items.py
+python .\ddp_covid_maxtreatment_items.py
+python .\ddp_infl_cumulative_items.py
 python .\ddp_infl_maxtreatment_items.py
-```
-
-Fuer COVID cumulative gender und Maxtreatment:
-
-```powershell
-python .\ddp_covid_items.py
 ```
 
 ## Wichtige Schalter
@@ -66,7 +62,7 @@ MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 
 ## Maxtreatment-Schalter
 
-In `ddp_infl_maxtreatment_items.py` und `ddp_covid_items.py` sind zusaetzlich diese DDP-Defaults gesetzt:
+In den Maxtreatment-Skripten sind zusaetzlich diese DDP-Defaults gesetzt:
 
 ```python
 USE_PART_OF_INSTEAD_OF_IDENTIFIER = False
