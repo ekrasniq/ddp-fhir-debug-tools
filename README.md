@@ -1,8 +1,8 @@
 # DDP FHIR Debug Tools
 
-Kleines Hilfsskript zum Nachrechnen von `infl.cumulative.gender` gegen einen FHIR-Server.
+Kleine Hilfsskripte zum Nachrechnen von Influenza-DDP-Items gegen einen FHIR-Server.
 
-Das Skript bildet die DDP-v0.5.7-Logik fuer Influenza nach:
+`ddp_cum_items.py` bildet die DDP-v0.5.7-Logik fuer `infl.cumulative.gender` nach:
 
 - Influenza-Observations per LOINC ab `2022-09-01`
 - Influenza-Conditions per ICD `J10.0`, `J10.1`, `J10.8`, `J09`
@@ -11,9 +11,14 @@ Das Skript bildet die DDP-v0.5.7-Logik fuer Influenza nach:
 - optionaler Condition-Link ueber `Encounter.diagnosis.condition`
 - Zaehlen von `Male`, `Female`, `Diverse` ueber positiv markierte Einrichtungskontakte
 
+`ddp_infl_maxtreatment_items.py` nutzt dieselbe Influenza-Kohorte und rechnet
+`infl.cumulative.maxtreatmentlevel` nach. Das Skript gibt zusaetzlich Debug-Zaehler fuer
+Supply-Kontakte, Locations, ICU-Dummy-Location, Procedures, VN-Flagging, `period.start` und
+die finale Deduplikation ueber Treatmentlevel hinweg aus.
+
 ## Nutzung
 
-In `ddp_cum_items.py` oben diese Werte setzen:
+Im jeweiligen Skript oben diese Werte setzen:
 
 ```python
 FHIR_BASE_URL = "http://localhost:8080/fhir"
@@ -25,6 +30,12 @@ Dann ausfuehren:
 
 ```powershell
 python .\ddp_cum_items.py
+```
+
+Fuer Maxtreatment:
+
+```powershell
+python .\ddp_infl_maxtreatment_items.py
 ```
 
 ## Wichtige Schalter
@@ -44,6 +55,24 @@ MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 
 `MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True` bildet nach, dass der DDP bei FHIR-Observation-Retrieval aktuell `Observation.interpretation` entfernt. Zum Gegencheck kann der Wert auf `False` gesetzt werden.
 
+## Maxtreatment-Schalter
+
+In `ddp_infl_maxtreatment_items.py` sind zusaetzlich diese DDP-Defaults gesetzt:
+
+```python
+USE_PART_OF_INSTEAD_OF_IDENTIFIER = False
+USE_ICU_UNDIFFERENTIATED = False
+CHECK_PROCEDURES_ICU_STAYS = True
+ICU_SERVICE_PROVIDER_IDS = set()
+ADDITIONAL_ICU_LOCATION_IDS = set()
+```
+
+`ICU_SERVICE_PROVIDER_IDS` entspricht `global.service-provider-identifier-of-icu-locations`.
+Wenn der DDP ICU ueber `Encounter.serviceProvider` erkennt, hier dieselben Werte eintragen.
+
+`ADDITIONAL_ICU_LOCATION_IDS` ist nur ein Debug-Override, falls Location-Ressourcen nicht per
+`Location?_id=...` geladen werden koennen.
+
 ## Debug-Ausgabe
 
 Der JSON-Output enthaelt neben dem Item auch Debug-Zaehler, u.a.:
@@ -57,3 +86,16 @@ Der JSON-Output enthaelt neben dem Item auch Debug-Zaehler, u.a.:
 - `positive_patient_ids_counted_by_gender_item`
 
 Damit laesst sich nachvollziehen, an welcher DDP-Logik Patienten verloren gehen.
+
+Beim Maxtreatment-Skript sind besonders diese Felder relevant:
+
+- `ddp_would_exclude_maxtreatment_items`
+- `supply_contacts_loaded_inpatient_or_shortstay`
+- `locations_loaded`
+- `dummy_icu_location_available`
+- `flagged_facility_contacts_by_vn`
+- `flagged_facility_contacts_missing_period_start`
+- `icu_supply_contacts_positive`
+- `procedures_after_icu_ward_filter`
+- `counts_before_final_duplicate_removal`
+- `debug_case_ids_by_treatmentlevel`
