@@ -2,11 +2,12 @@
 
 Kleine Hilfsskripte zum Nachrechnen von COVID- und Influenza-DDP-Items gegen einen FHIR-Server.
 
-Es gibt vier klare Einstiegsskripte:
+Es gibt klare Einstiegsskripte:
 
 - `ddp_covid_cumulative_items.py`: COVID `cumulative.gender`
 - `ddp_covid_maxtreatment_items.py`: COVID Maxtreatment-Items
 - `ddp_infl_cumulative_items.py`: Influenza `infl.cumulative.gender`
+- `ddp_infl_cumulative_conditions_only.py`: Influenza `infl.cumulative.gender` ohne Observation/LOINC-Suche
 - `ddp_infl_maxtreatment_items.py`: Influenza Maxtreatment-Items
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
@@ -34,12 +35,13 @@ FHIR_USER = "user"
 FHIR_PASSWORD = "password"
 ```
 
-Dann eines der vier Skripte ausfuehren:
+Dann eines der Skripte ausfuehren:
 
 ```powershell
 python .\ddp_covid_cumulative_items.py
 python .\ddp_covid_maxtreatment_items.py
 python .\ddp_infl_cumulative_items.py
+python .\ddp_infl_cumulative_conditions_only.py
 python .\ddp_infl_maxtreatment_items.py
 ```
 
@@ -52,6 +54,8 @@ USE_POST_FOR_ID_SEARCH = True
 USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = True
 FILTER_PATIENT_RETRIEVAL = True
 MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
+USE_OBSERVATIONS = True
+USE_CONDITIONS = True
 ```
 
 `USE_POST_FOR_ID_SEARCH = True` verhindert zu lange URLs bei Suchen wie `Encounter?subject=id1,id2,...`.
@@ -59,6 +63,8 @@ MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 `USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = True` ist wichtig, wenn `Condition.encounter` fehlt und die Zuordnung ueber `Encounter.diagnosis.condition` erfolgt.
 
 `MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True` bildet nach, dass der DDP bei FHIR-Observation-Retrieval aktuell `Observation.interpretation` entfernt. Zum Gegencheck kann der Wert auf `False` gesetzt werden.
+
+`ddp_infl_cumulative_conditions_only.py` setzt `USE_OBSERVATIONS = False` und ueberspringt dadurch die komplette LOINC/Observation-Suche. Das ist der schnelle Gegencheck, ob `infl.cumulative.gender` im DDP nur ueber Conditions auf die kleine Patientenzahl kommt.
 
 ## Maxtreatment-Schalter
 

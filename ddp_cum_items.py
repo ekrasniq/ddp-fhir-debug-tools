@@ -26,6 +26,8 @@ USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS = True
 FILTER_PATIENT_RETRIEVAL = True
 FILTER_RESOURCES_BY_DATE = True
 MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
+USE_OBSERVATIONS = True
+USE_CONDITIONS = True
 
 INFLUENZA_START_DATE = "2022-09-01"
 ICD_SYSTEM = "http://fhir.de/CodeSystem/bfarm/icd-10-gm"
@@ -63,33 +65,41 @@ INVALID_OBSERVATION_STATUS = {"cancelled", "entered-in-error"}
 
 
 def main() -> None:
-    observations_raw = list(
-        search(
-            "Observation",
-            {
-                "code": ",".join(DISEASE_RETRIEVAL_LOINC_CODES),
-                "_pretty": "false",
-                "_count": str(BATCH_SIZE),
-                **({"date": "ge" + DISEASE_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
-            },
+    observations_raw = (
+        list(
+            search(
+                "Observation",
+                {
+                    "code": ",".join(DISEASE_RETRIEVAL_LOINC_CODES),
+                    "_pretty": "false",
+                    "_count": str(BATCH_SIZE),
+                    **({"date": "ge" + DISEASE_START_DATE} if FILTER_RESOURCES_BY_DATE else {}),
+                },
+            )
         )
+        if USE_OBSERVATIONS
+        else []
     )
     observations = [o for o in observations_raw if is_valid_observation(o)]
 
-    conditions = list(
-        search(
-            "Condition",
-            {
-                "code": ",".join(DISEASE_ICD_CODES),
-                "_pretty": "false",
-                "_count": str(BATCH_SIZE),
-                **(
-                    {"recorded-date": "ge" + DISEASE_START_DATE}
-                    if FILTER_RESOURCES_BY_DATE
-                    else {}
-                ),
-            },
+    conditions = (
+        list(
+            search(
+                "Condition",
+                {
+                    "code": ",".join(DISEASE_ICD_CODES),
+                    "_pretty": "false",
+                    "_count": str(BATCH_SIZE),
+                    **(
+                        {"recorded-date": "ge" + DISEASE_START_DATE}
+                        if FILTER_RESOURCES_BY_DATE
+                        else {}
+                    ),
+                },
+            )
         )
+        if USE_CONDITIONS
+        else []
     )
 
     obs_pids = {ref_id(o.get("subject")) for o in observations}
@@ -220,6 +230,11 @@ def main() -> None:
             "id_chunk_size": ID_CHUNK_SIZE,
             "use_post_for_id_search": USE_POST_FOR_ID_SEARCH,
             "use_encounter_diagnosis_for_conditions": USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS,
+            "use_observations": USE_OBSERVATIONS,
+            "use_conditions": USE_CONDITIONS,
+            "disease_positive_loinc_codes": len(DISEASE_POSITIVE_LOINC_CODES),
+            "disease_retrieval_loinc_codes": len(DISEASE_RETRIEVAL_LOINC_CODES),
+            "disease_icd_codes": len(DISEASE_ICD_CODES),
         },
         "debug_patient_ids": pids_by_gender,
     }
