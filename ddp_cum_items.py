@@ -28,6 +28,7 @@ FILTER_RESOURCES_BY_DATE = True
 MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 USE_OBSERVATIONS = True
 USE_CONDITIONS = True
+MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE = True
 
 INFLUENZA_START_DATE = "2022-09-01"
 ICD_SYSTEM = "http://fhir.de/CodeSystem/bfarm/icd-10-gm"
@@ -65,6 +66,7 @@ INVALID_OBSERVATION_STATUS = {"cancelled", "entered-in-error"}
 
 
 def main() -> None:
+    condition_revinclude_encounters = []
     observations_raw = (
         list(
             search(
@@ -82,25 +84,47 @@ def main() -> None:
     )
     observations = [o for o in observations_raw if is_valid_observation(o)]
 
-    conditions = (
-        list(
-            search(
-                "Condition",
-                {
-                    "code": ",".join(DISEASE_ICD_CODES),
-                    "_pretty": "false",
-                    "_count": str(BATCH_SIZE),
-                    **(
-                        {"recorded-date": "ge" + DISEASE_START_DATE}
-                        if FILTER_RESOURCES_BY_DATE
-                        else {}
-                    ),
-                },
+    condition_resources_raw = []
+    if USE_CONDITIONS:
+        condition_params = {
+            "code": ",".join(DISEASE_ICD_CODES),
+            "_pretty": "false",
+            "_count": str(BATCH_SIZE),
+        }
+        if (
+            FILTER_RESOURCES_BY_DATE
+            and not (
+                USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS
+                and MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE
             )
-        )
-        if USE_CONDITIONS
-        else []
+        ):
+            condition_params["recorded-date"] = "ge" + DISEASE_START_DATE
+        if USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS and MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE:
+            condition_params["_revinclude"] = "Encounter:diagnosis"
+
+        condition_bundle_resources = list(search("Condition", condition_params))
+        conditions = [
+            r for r in condition_bundle_resources if r.get("resourceType", "Condition") == "Condition"
+        ]
+        condition_revinclude_encounters = [
+            r for r in condition_bundle_resources if r.get("resourceType") == "Encounter"
+        ]
+        condition_resources_raw = condition_bundle_resources
+    else:
+        conditions = []
+
+    condition_encounter_by_initial_revinclude = (
+        link_conditions_to_encounters_by_diagnosis(conditions, condition_revinclude_encounters)
+        if USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS
+        and MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE
+        else {}
     )
+
+    if MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE:
+        for condition in conditions:
+            linked_encounter_id = condition_encounter_by_initial_revinclude.get(condition.get("id"))
+            if linked_encounter_id and not ref_id(condition.get("encounter")):
+                condition["encounter"] = {"reference": "Encounter/" + linked_encounter_id}
 
     obs_pids = {ref_id(o.get("subject")) for o in observations}
     condition_pids = {ref_id(c.get("subject")) for c in conditions}
@@ -140,11 +164,14 @@ def main() -> None:
     )
     encounters = [e for e in encounters if is_valid_encounter(e)]
     encounter_by_id = {e.get("id"): e for e in encounters if e.get("id")}
-    condition_encounter_by_diagnosis = (
-        link_conditions_to_encounters_by_diagnosis(conditions, encounters)
-        if USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS
-        else {}
-    )
+    if USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS:
+        condition_encounter_by_diagnosis = (
+            condition_encounter_by_initial_revinclude
+            if MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE
+            else link_conditions_to_encounters_by_diagnosis(conditions, encounters)
+        )
+    else:
+        condition_encounter_by_diagnosis = {}
 
     positive_encounter_ids_from_obs = {
         ref_id(o.get("encounter"))
@@ -187,6 +214,8 @@ def main() -> None:
         "debug": {
             "observations_raw": len(observations_raw),
             "observations_after_status_filter": len(observations),
+            "condition_bundle_resources_raw": len(condition_resources_raw),
+            "condition_revinclude_encounters_raw": len(condition_revinclude_encounters),
             "conditions_raw": len(conditions),
             "source_patient_ids_all": len(all_source_pids),
             "source_patient_ids_positive": len(positive_source_pids),
@@ -200,6 +229,14 @@ def main() -> None:
                 clean_set(positive_encounter_ids_from_conditions)
             ),
             "conditions_linked_via_encounter_diagnosis": len(condition_encounter_by_diagnosis),
+            "conditions_linked_via_initial_revinclude": len(
+                condition_encounter_by_initial_revinclude
+            ),
+            "positive_conditions_with_case_id_after_initial_link": sum(
+                1
+                for c in conditions
+                if is_influenza_condition(c) and ref_id(c.get("encounter"))
+            ),
             "positive_encounter_ids_total": len(positive_encounter_ids),
             "positive_encounter_ids_loaded": sum(1 for x in positive_encounter_ids if x in encounter_by_id),
             "positive_encounter_ids_missing_in_loaded_encounters": len(
@@ -230,6 +267,7 @@ def main() -> None:
             "id_chunk_size": ID_CHUNK_SIZE,
             "use_post_for_id_search": USE_POST_FOR_ID_SEARCH,
             "use_encounter_diagnosis_for_conditions": USE_ENCOUNTER_DIAGNOSIS_FOR_CONDITIONS,
+            "mimic_ddp_condition_revinclude_scope": MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE,
             "use_observations": USE_OBSERVATIONS,
             "use_conditions": USE_CONDITIONS,
             "disease_positive_loinc_codes": len(DISEASE_POSITIVE_LOINC_CODES),

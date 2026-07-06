@@ -56,6 +56,7 @@ FILTER_PATIENT_RETRIEVAL = True
 MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True
 USE_OBSERVATIONS = True
 USE_CONDITIONS = True
+MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE = True
 ```
 
 `USE_POST_FOR_ID_SEARCH = True` verhindert zu lange URLs bei Suchen wie `Encounter?subject=id1,id2,...`.
@@ -65,6 +66,11 @@ USE_CONDITIONS = True
 `MIMIC_DDP_OBS_INTERPRETATION_REMOVAL = True` bildet nach, dass der DDP bei FHIR-Observation-Retrieval aktuell `Observation.interpretation` entfernt. Zum Gegencheck kann der Wert auf `False` gesetzt werden.
 
 `ddp_infl_cumulative_conditions_only.py` setzt `USE_OBSERVATIONS = False` und ueberspringt dadurch die komplette LOINC/Observation-Suche. Das ist der schnelle Gegencheck, ob `infl.cumulative.gender` im DDP nur ueber Conditions auf die kleine Patientenzahl kommt.
+
+`MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE = True` bildet die DDP-Condition-Retrieval-Variante
+`Condition?...&_revinclude=Encounter:diagnosis` nach. Dadurch werden Conditions nur ueber die
+initial per `_revinclude` mitgelieferten Encounter-Diagnosen verlinkt, nicht nachtraeglich ueber
+alle geladenen Patient-Encounter.
 
 ## Maxtreatment-Schalter
 
@@ -95,6 +101,8 @@ gepackt und enthaelt die internen Zwischenzaehler.
 Der JSON-Output enthaelt neben dem Item auch Debug-Zaehler, u.a.:
 
 - `conditions_linked_via_encounter_diagnosis`
+- `conditions_linked_via_initial_revinclude`
+- `condition_revinclude_encounters_raw`
 - `positive_encounter_ids_loaded`
 - `positive_encounter_ids_missing_in_loaded_encounters`
 - `encounters_without_vn_identifier`
