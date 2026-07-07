@@ -8,6 +8,7 @@ Es gibt klare Einstiegsskripte:
 - `ddp_covid_maxtreatment_items.py`: COVID Maxtreatment-Items
 - `ddp_infl_cumulative_items.py`: Influenza `infl.cumulative.gender`
 - `ddp_infl_cumulative_conditions_only.py`: Influenza `infl.cumulative.gender` ohne Observation/LOINC-Suche
+- `ddp_infl_cumulative_condition_trace.py`: Trace der Influenza-Conditions, die `infl.cumulative.gender` treiben
 - `ddp_infl_maxtreatment_items.py`: Influenza Maxtreatment-Items
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
@@ -42,6 +43,7 @@ python .\ddp_covid_cumulative_items.py
 python .\ddp_covid_maxtreatment_items.py
 python .\ddp_infl_cumulative_items.py
 python .\ddp_infl_cumulative_conditions_only.py
+python .\ddp_infl_cumulative_condition_trace.py
 python .\ddp_infl_maxtreatment_items.py
 ```
 
@@ -71,6 +73,10 @@ MIMIC_DDP_CONDITION_REV_INCLUDE_SCOPE = True
 `Condition?...&_revinclude=Encounter:diagnosis` nach. Dadurch werden Conditions nur ueber die
 initial per `_revinclude` mitgelieferten Encounter-Diagnosen verlinkt, nicht nachtraeglich ueber
 alle geladenen Patient-Encounter.
+
+`ddp_infl_cumulative_condition_trace.py` ignoriert Influenza-Observations und listet pro
+Influenza-Condition, ob sie per `Condition.encounter`, per `_revinclude=Encounter:diagnosis`
+oder gar nicht in die `infl.cumulative.gender`-Zaehllogik gelangt.
 
 ## Maxtreatment-Schalter
 
