@@ -9,6 +9,7 @@ Es gibt klare Einstiegsskripte:
 - `ddp_infl_cumulative_items.py`: Influenza `infl.cumulative.gender`
 - `ddp_infl_cumulative_conditions_only.py`: Influenza `infl.cumulative.gender` ohne Observation/LOINC-Suche
 - `ddp_infl_cumulative_condition_trace.py`: Trace der Influenza-Conditions, die `infl.cumulative.gender` treiben
+- `ddp_infl_case_numbers.py`: Distinct Fallnummern/VNs aller Patienten mit Influenza-Condition
 - `ddp_infl_maxtreatment_items.py`: Influenza Maxtreatment-Items
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
@@ -44,6 +45,7 @@ python .\ddp_covid_maxtreatment_items.py
 python .\ddp_infl_cumulative_items.py
 python .\ddp_infl_cumulative_conditions_only.py
 python .\ddp_infl_cumulative_condition_trace.py
+python .\ddp_infl_case_numbers.py
 python .\ddp_infl_maxtreatment_items.py
 ```
 
@@ -77,6 +79,10 @@ alle geladenen Patient-Encounter.
 `ddp_infl_cumulative_condition_trace.py` ignoriert Influenza-Observations und listet pro
 Influenza-Condition, ob sie per `Condition.encounter`, per `_revinclude=Encounter:diagnosis`
 oder gar nicht in die `infl.cumulative.gender`-Zaehllogik gelangt.
+
+`ddp_infl_case_numbers.py` gibt standardmaessig nur eine komma-separierte Liste distinct
+Fallnummern aus. Es liest die Fallnummer aus `Encounter.identifier` Slice `VN` und aus
+`Encounter.account`; fuer Leerzeichen als Trenner `OUTPUT_SEPARATOR = " "` setzen.
 
 ## Maxtreatment-Schalter
 
