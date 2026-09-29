@@ -1,0 +1,14 @@
+@fhirBaseUrl = https://FHIR-SERVER.EXAMPLE/fhir
+
+### Anzahl eindeutiger Patient:innen mit positivem COVID-Laborbefund und ICU-Versorgungsstellenkontakt
+# Ersetze fhirBaseUrl und ergaenze die am Zielserver erforderliche Authentifizierung.
+# Das Ergebnis steht im Searchset-Bundle unter Bundle.total.
+#
+# COVID-LOINC: 94640-0, 94306-8, 96763-8, 94500-6, 94558-4
+# Positiver valueCodeableConcept (SNOMED CT): 10828004, 260373001, 52101004
+# ICU-Kontaktart: http://fhir.de/CodeSystem/kontaktart-de|intensivstationaer
+#
+# code-value-concept bindet Testcode und positives Ergebnis an dieselbe Observation.
+# Die Kommata bilden die ODER-Liste aller 5 x 3 zulaessigen Codepaare.
+GET {{fhirBaseUrl}}/Patient?_has:Observation:patient:code-value-concept=http%3A%2F%2Floinc.org%7C94640-0%24http%3A%2F%2Fsnomed.info%2Fsct%7C10828004,http%3A%2F%2Floinc.org%7C94640-0%24http%3A%2F%2Fsnomed.info%2Fsct%7C260373001,http%3A%2F%2Floinc.org%7C94640-0%24http%3A%2F%2Fsnomed.info%2Fsct%7C52101004,http%3A%2F%2Floinc.org%7C94306-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C10828004,http%3A%2F%2Floinc.org%7C94306-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C260373001,http%3A%2F%2Floinc.org%7C94306-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C52101004,http%3A%2F%2Floinc.org%7C96763-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C10828004,http%3A%2F%2Floinc.org%7C96763-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C260373001,http%3A%2F%2Floinc.org%7C96763-8%24http%3A%2F%2Fsnomed.info%2Fsct%7C52101004,http%3A%2F%2Floinc.org%7C94500-6%24http%3A%2F%2Fsnomed.info%2Fsct%7C10828004,http%3A%2F%2Floinc.org%7C94500-6%24http%3A%2F%2Fsnomed.info%2Fsct%7C260373001,http%3A%2F%2Floinc.org%7C94500-6%24http%3A%2F%2Fsnomed.info%2Fsct%7C52101004,http%3A%2F%2Floinc.org%7C94558-4%24http%3A%2F%2Fsnomed.info%2Fsct%7C10828004,http%3A%2F%2Floinc.org%7C94558-4%24http%3A%2F%2Fsnomed.info%2Fsct%7C260373001,http%3A%2F%2Floinc.org%7C94558-4%24http%3A%2F%2Fsnomed.info%2Fsct%7C52101004&_has:Encounter:patient:type=http%3A%2F%2Ffhir.de%2FCodeSystem%2Fkontaktart-de%7Cintensivstationaer&_summary=count&_total=accurate
+Accept: application/fhir+json

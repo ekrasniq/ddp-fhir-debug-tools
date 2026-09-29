@@ -11,6 +11,8 @@ Es gibt klare Einstiegsskripte:
 - `ddp_infl_cumulative_condition_trace.py`: Trace der Influenza-Conditions, die `infl.cumulative.gender` treiben
 - `ddp_infl_case_numbers.py`: Distinct Fallnummern/VNs aller Patienten mit Influenza-Condition
 - `ddp_infl_maxtreatment_items.py`: Influenza Maxtreatment-Items
+- `fhir-searches/covid-icu-patient-count.http`: distinct Patient-Count fuer positiven
+  COVID-Laborbefund plus intensivstationaeren Encounter
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
 
