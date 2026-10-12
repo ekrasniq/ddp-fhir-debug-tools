@@ -6,6 +6,10 @@ Es gibt klare Einstiegsskripte:
 
 - `ddp_covid_cumulative_items.py`: COVID `cumulative.gender`
 - `ddp_covid_maxtreatment_items.py`: COVID Maxtreatment-Items
+- `ddp_covid_icu_debug.py`: gezielter COVID `ICU_undifferentiated`-Vergleich mit/ohne
+  partOf auf demselben Datenstand; ICU ueber Kontaktart, Paging/Batches und SQLite
+- `ddp_covid_icu_without_partof.py` / `ddp_covid_icu_with_partof.py`: separate
+  Einstiegspunkte fuer diesen Vergleich
 - `ddp_infl_cumulative_items.py`: Influenza `infl.cumulative.gender`
 - `ddp_infl_cumulative_conditions_only.py`: Influenza `infl.cumulative.gender` ohne Observation/LOINC-Suche
 - `ddp_infl_cumulative_condition_trace.py`: Trace der Influenza-Conditions, die `infl.cumulative.gender` treiben
@@ -15,6 +19,13 @@ Es gibt klare Einstiegsskripte:
   COVID-Laborbefund plus intensivstationaeren Encounter
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
+
+Fuer die Differenz **ueber 3.000 in der FHIR-Suche gegen 61 im DDP** siehe die
+[Anleitung zum COVID-ICU-Debugger](docs/covid-icu-debug.md). Dieser Vergleich gibt
+aggregierte Verlustgruende je Patient, beide Hierarchie-Modi und einen Gegencheck
+der fuenf lokalen COVID-LOINCs aus. Python 3.10+, keine Zusatzpakete; standardmaessig
+500 Ressourcen pro Seite und 25 Patienten pro Encounter-Batch. Authentifizierung
+erfolgt hier ueber lokale Umgebungsvariablen bzw. eine verdeckte Passwortabfrage.
 
 Die Cumulative-Skripte bilden die DDP-v0.5.7-Logik fuer `cumulative.gender` nach:
 
