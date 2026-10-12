@@ -8,11 +8,13 @@ import sqlite3
 import threading
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import ddp_covid_icu_debug as debug
+from ddp_covid_icu_gitops_test import DEFAULTS as GITOPS_DEFAULTS
 
 
 def coding(system, code):
@@ -36,7 +38,7 @@ def encounter(eid, pid, level, vn=None, parent=None, icu=False,
     return result
 
 
-class ModelTests(unittest.TestCase):
+class ModelFixture(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.executescript(debug.SCHEMA)
@@ -72,6 +74,8 @@ class ModelTests(unittest.TestCase):
     def run_model(self, mode="without_partof", profile="ddp_configured"):
         return debug.analyze(self.db, self.args, profile, mode)
 
+
+class ModelTests(ModelFixture):
     def test_same_vn_deduplicates_patients_and_accepts_contactart_with_location(self):
         self.chain("a", "case-a", "case-a")
         self.add_enc(encounter("another-vk", "a", "versorgungsstellenkontakt", "case-a", "a-ak", icu=True))
@@ -174,6 +178,119 @@ class ModelTests(unittest.TestCase):
         self.assertIsNone(debug.ref_id({"identifier": {"value": "case-number"}}))
         self.assertIsNone(debug.ref_id({"reference": "#contained"}))
         self.assertEqual(debug.timestamp("2021-01-01T11:00:00Z"), debug.timestamp("2021-01-01T12:00:00+01:00"))
+
+
+class NativeModelTests(ModelFixture):
+    def add_enc(self, resource):
+        super().add_enc(resource)
+        debug.stage_native_encounter(self.db, resource, self.args)
+
+    def location(self, code="ICU", physical="wa", **overrides):
+        resource = {"resourceType": "Location", "id": "ordinary-ward", "status": "inactive",
+                    "physicalType": coding("any-system", physical), "type": [coding("any-system", code)]}
+        resource.update(overrides)
+        self.db.execute("INSERT OR REPLACE INTO locations VALUES (?,?,?,?,?,?)", debug.location_row(resource))
+
+    def native(self):
+        return debug.analyze(self.db, self.args, "ddp_configured", "without_partof", "native")
+
+    def test_existing_non_icu_location_blocks_contactart_fallback(self):
+        self.chain("a", "same", "same")
+        self.location(code="GEN")
+        self.assertEqual(1, self.run_model()["patient_count"])
+        report = self.native()
+        self.assertEqual(0, report["patient_count"])
+        self.assertEqual({"location_type_not_icu": 1}, report["diagnostics"]["positive_contactart_icu_vk_rejection_reasons"])
+        self.assertEqual(1, debug.compare_detection(self.db, "ddp_configured", "without_partof")["only_contactart"])
+
+    def test_recognized_location_counts_historical_icu_without_system_check(self):
+        self.chain("a", "same", "same")
+        self.location()
+        report = self.native()
+        self.assertEqual(1, report["patient_count"])
+        self.assertEqual(1, report["diagnostics"]["native_icu_via_real_location_vk"])
+
+    def test_absent_location_resource_is_diagnosed_and_item_gate_is_not_zero(self):
+        self.chain("a", "same", "same")
+        report = self.native()
+        self.assertIsNone(report["data_item"])
+        self.assertFalse(report["diagnostics"]["native_item_locations_gate_satisfied"])
+        self.assertEqual({"location_not_loaded": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+
+    def test_physical_type_room_or_missing_does_not_count(self):
+        self.chain("a", "same", "same")
+        self.location(physical="ro")
+        report = self.native()
+        self.assertEqual(0, report["patient_count"])
+        self.assertEqual({"physical_type_not_ward": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+
+    def test_missing_physical_type_is_reported_separately(self):
+        self.chain("a", "same", "same")
+        self.location(physicalType={})
+        report = self.native()
+        self.assertEqual({"location_missing_physical_type": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+
+    def test_later_type_concept_matches_any_check_but_native_early_return_rejects(self):
+        self.chain("a", "same", "same")
+        self.location(type=[coding("any", "GEN"), coding("any", "ICU")])
+        report = self.native()
+        self.assertEqual(0, report["patient_count"])
+        self.assertEqual({"icu_code_only_in_later_type_concept": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+        self.assertTrue(debug.ddp_first_coded_concept([{"coding": [{}]}, coding("any", "ICU")], {"ICU"}))
+
+    def test_contactart_without_location_creates_registered_dummy(self):
+        self.chain("a", "same", "same")
+        self.db.execute("UPDATE encounters SET has_location=0 WHERE id='a-vk'")
+        self.db.execute("DELETE FROM encounter_locations WHERE enc='a-vk'")
+        report = self.native()
+        self.assertEqual(1, report["patient_count"])
+        self.assertTrue(report["diagnostics"]["dummy_icu_location_available"])
+        self.assertEqual(1, report["diagnostics"]["native_icu_via_contactart_fallback_vk"])
+
+    def test_native_location_counts_even_without_intensive_contactart(self):
+        self.chain("a", "same", "same")
+        self.db.execute("UPDATE encounters SET icu=0 WHERE id='a-vk'")
+        self.db.execute("DELETE FROM baseline")
+        self.location()
+        self.assertEqual(0, self.run_model()["patient_count"])
+        self.assertEqual(1, self.native()["counted_outside_baseline"])
+
+    def test_missing_literal_reference_does_not_trigger_fallback(self):
+        self.chain("a", "same", "same")
+        self.db.execute("UPDATE encounter_locations SET lid=NULL WHERE enc='a-vk'")
+        report = self.native()
+        self.assertEqual({"no_literal_location_reference": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+
+    def test_duplicate_contactart_codes_block_exact_fallback(self):
+        self.chain("a", "same", "same")
+        self.db.execute("UPDATE encounters SET has_location=0 WHERE id='a-vk'")
+        self.db.execute("UPDATE encounter_native SET exact_contactart=0 WHERE id='a-vk'")
+        self.db.execute("DELETE FROM encounter_locations WHERE enc='a-vk'")
+        report = self.native()
+        self.assertEqual(0, report["patient_count"])
+        self.assertEqual({"contactart_fallback_not_exact": 1}, report["diagnostics"]["contactart_icu_vk_rejection_reasons"])
+
+    def test_configured_service_provider_fallback(self):
+        self.args.icu_service_provider_ids = "synthetic-icu-provider"
+        self.patient("a", baseline=False)
+        self.add_enc(encounter("a-ek", "a", "einrichtungskontakt", "same"))
+        vk = encounter("a-vk", "a", "versorgungsstellenkontakt", "same")
+        vk["serviceProvider"] = {"reference": "Organization/synthetic-icu-provider"}
+        self.add_enc(vk)
+        self.obs("obs", "a", "a-ek")
+        report = self.native()
+        self.assertEqual(1, report["patient_count"])
+        self.assertEqual(1, report["diagnostics"]["native_icu_via_service_provider_fallback_vk"])
+
+    def test_ambiguous_vn_selection_reports_bounds_instead_of_exact_claim(self):
+        self.chain("a", "same", "same")
+        self.location()
+        self.add_enc(encounter("a-0-ambulant", "a", "einrichtungskontakt", "same", cls="AMB"))
+        report = self.native()
+        self.assertEqual(0, report["patient_count"])
+        bounds = report["diagnostics"]["vn_selection_bounds"]
+        self.assertEqual(0, bounds["guaranteed_patients_lower_bound"])
+        self.assertEqual(1, bounds["possible_patients_upper_bound"])
 
 
 class HttpTests(unittest.TestCase):
@@ -333,6 +450,125 @@ class PipelineTests(unittest.TestCase):
             debug.load_sources(db, SyntheticClient(), args, Counter())
             self.assertEqual("new", db.execute("SELECT enc FROM conditions").fetchone()[0])
             self.assertEqual(1, debug.scalar(db, "SELECT COUNT(*) FROM retrieved_conditions"))
+
+
+class NativePipelineTests(unittest.TestCase):
+    def fixture_client(self):
+        outer = self
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def pages(self, kind, params, force_get=False):
+                self.calls.append((kind, params))
+                if kind == "Patient":
+                    ids = params.get("_id", "a,b,c,d,e,f").split(",")
+                    values = [{"resourceType": "Patient", "id": pid} for pid in ids]
+                elif kind == "Observation":
+                    outer.assertEqual(set(params["code"].split(",")), debug.QUERY_LOINCS | {"96895-8", "96741-4"})
+                    values = [{"resourceType": "Observation", "id": pid + "-obs", "status": "final",
+                               "subject": {"reference": "Patient/" + pid},
+                               "encounter": {"reference": "Encounter/" + pid + "-ek"},
+                               "effectiveDateTime": "2021-01-01T12:00:00Z",
+                               "code": coding(debug.LOINC, "94558-4"),
+                               "valueCodeableConcept": coding(debug.SNOMED, "260373001")}
+                              for pid in "abcdefg"]
+                elif kind == "Condition":
+                    outer.assertEqual("Encounter:diagnosis", params["_revinclude"])
+                    values = [{"resourceType": "Condition", "id": "condition-h",
+                               "subject": {"reference": "Patient/h"}, "code": coding(debug.ICD, "U07.1")},
+                              {"resourceType": "Encounter", "id": "h-ek",
+                               "diagnosis": [{"condition": {"reference": "Condition/condition-h"}}]}]
+                elif kind == "Encounter":
+                    values = []
+                    for pid in params["subject"].split(","):
+                        ek = encounter(pid + "-ek", pid, "einrichtungskontakt", pid + "-vn")
+                        vk = encounter(pid + "-vk", pid, "versorgungsstellenkontakt", pid + "-vn", icu=pid in "abcdef")
+                        vk["location"] = [{"location": {"reference": "Location/loc-" + pid}}]
+                        if pid == "c":
+                            vk.pop("location")
+                        values.extend((ek, vk))
+                elif kind == "Location":
+                    values = []
+                    for lid in params["_id"].split(","):
+                        pid = lid.split("-")[-1]
+                        if pid == "d":
+                            continue
+                        resource = {"resourceType": "Location", "id": lid,
+                                    "physicalType": coding("any", "ro" if pid == "e" else "wa"),
+                                    "type": [coding("any", "GEN" if pid in "bf" else "ICU")]}
+                        if pid == "f":
+                            resource["type"].append(coding("any", "ICU"))
+                        values.append(resource)
+                else:
+                    raise AssertionError(kind)
+                for resource in values:
+                    yield {"resourceType": "Bundle", "type": "searchset", "entry": [{"resource": resource}]}
+
+        return Client()
+
+    def run_fixture(self, directory):
+        client = self.fixture_client()
+        output = io.StringIO()
+        path = directory + "/native.sqlite"
+        with patch.object(debug, "FhirClient", return_value=client), redirect_stdout(output), redirect_stderr(io.StringIO()):
+            debug.main(["--fhir-base-url", "http://synthetic.example/fhir", "--auth", "none",
+                        "--work-db", path, "--keep-work-db", "--page-size", "1",
+                        "--patient-batch-size", "2", "--location-batch-size", "2"], defaults=GITOPS_DEFAULTS)
+        return client, json.loads(output.getvalue()), path
+
+    def test_gitops_preset_native_contactart_and_location_loss_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client, report, path = self.run_fixture(directory)
+            self.assertTrue(Path(path).is_file())
+        self.assertEqual(6, report["baseline_patient_query_count"])
+        self.assertEqual("revinclude", report["configuration"]["condition_link_mode"])
+        self.assertEqual(sorted(debug.QUERY_LOINCS), report["configuration"]["ddp_pcr_loincs"])
+        self.assertEqual("native", report["configuration"]["primary_icu_detection"])
+        run = report["runs"]["ddp_configured"]["without_partof"]
+        self.assertEqual(4, run["patient_count"])
+        self.assertEqual(6, run["contactart_countercheck"]["patient_count"])
+        self.assertEqual(2, run["baseline_counted"])
+        self.assertEqual(2, run["counted_outside_baseline"])
+        self.assertEqual({"both_detections": 2, "only_contactart": 4, "only_native": 2},
+                         report["icu_detection_comparison"]["ddp_configured"]["without_partof"])
+        self.assertEqual({"location_type_not_icu": 1, "location_not_loaded": 1,
+                          "physical_type_not_ward": 1, "icu_code_only_in_later_type_concept": 1},
+                         run["diagnostics"]["positive_contactart_icu_vk_rejection_reasons"])
+        self.assertEqual(-61, report["ddp_count_comparison"]["runs"]["ddp_configured"]["without_partof"]["delta"])
+        self.assertTrue(report["loinc_comparison"]["without_partof"]["profiles_equivalent"])
+        self.assertTrue(all(len(params["_id"].split(",")) <= 2 for kind, params in client.calls if kind == "Location"))
+
+    def test_completed_snapshot_reuse_is_read_only_and_makes_no_network_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client, initial, path = self.run_fixture(directory)
+            before = Path(path).read_bytes()
+            output = io.StringIO()
+            with patch.object(debug, "FhirClient", side_effect=AssertionError("No network allowed")), \
+                    redirect_stdout(output), redirect_stderr(io.StringIO()):
+                debug.main(["--fhir-base-url", "http://synthetic.example/fhir", "--reuse-work-db", path], defaults=GITOPS_DEFAULTS)
+            replay = json.loads(output.getvalue())
+            self.assertEqual(initial["runs"], replay["runs"])
+            self.assertTrue(replay["retrieval"]["reused_snapshot"])
+            self.assertEqual(before, Path(path).read_bytes())
+            output = io.StringIO()
+            with patch.object(debug, "FhirClient", side_effect=AssertionError("No network allowed")), \
+                    redirect_stdout(output), redirect_stderr(io.StringIO()):
+                debug.main(["--fhir-base-url", "http://synthetic.example/fhir", "--reuse-work-db", path,
+                            "--mode", "both"], defaults=GITOPS_DEFAULTS)
+            both = json.loads(output.getvalue())
+            self.assertEqual({"both_modes": 4, "only_with_partof": 0, "only_without_partof": 0},
+                             both["partof_comparison"]["ddp_configured"])
+            self.assertEqual(before, Path(path).read_bytes())
+
+    def test_snapshot_with_mismatched_codes_is_rejected_and_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, path = self.run_fixture(directory)
+            with redirect_stderr(io.StringIO()), self.assertRaisesRegex(ValueError, "settings differ"):
+                debug.main(["--fhir-base-url", "http://synthetic.example/fhir", "--reuse-work-db", path,
+                            "--ddp-pcr-loincs", "94500-6"], defaults=GITOPS_DEFAULTS)
+            self.assertTrue(Path(path).is_file())
 
 
 if __name__ == "__main__":

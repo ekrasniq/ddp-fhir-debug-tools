@@ -6,6 +6,8 @@ Es gibt klare Einstiegsskripte:
 
 - `ddp_covid_cumulative_items.py`: COVID `cumulative.gender`
 - `ddp_covid_maxtreatment_items.py`: COVID Maxtreatment-Items
+- `ddp_covid_icu_gitops_test.py`: naechster Lauf mit den geprueften `-test`-Voreinstellungen,
+  nativer Location-ICU-Erkennung und Kontaktart-Gegenprobe
 - `ddp_covid_icu_debug.py`: gezielter COVID `ICU_undifferentiated`-Vergleich mit/ohne
   partOf auf demselben Datenstand; ICU ueber Kontaktart, Paging/Batches und SQLite
 - `ddp_covid_icu_without_partof.py` / `ddp_covid_icu_with_partof.py`: separate
@@ -20,7 +22,13 @@ Es gibt klare Einstiegsskripte:
 
 `ddp_cum_items.py` ist nur noch das gemeinsame Cumulative-Hilfsmodul mit Influenza-Default.
 
-Fuer die Differenz **ueber 3.000 in der FHIR-Suche gegen 61 im DDP** siehe die
+Fuer den naechsten Gegencheck **3.841 in der FHIR-Suche gegen 65 im DDP** siehe
+[Nativer ICU-Vergleich mit GitOps-Voreinstellungen](docs/covid-icu-native-next-run.md).
+Dieses Preset verwendet die fuenf lokalen PCR-Codes, Conditions per revinclude,
+partOf=false und 150 Ressourcen pro Seite. Native und Kontaktart-Erkennung werden
+auf demselben Datenstand verglichen; vollstaendige Snapshots sind lokal wiederverwendbar.
+
+Fuer den urspruenglichen Kontaktart-Vergleich **ueber 3.000 in der FHIR-Suche gegen 61 im DDP** siehe die
 [Anleitung zum COVID-ICU-Debugger](docs/covid-icu-debug.md). Dieser Vergleich gibt
 aggregierte Verlustgruende je Patient, beide Hierarchie-Modi und einen Gegencheck
 der fuenf lokalen COVID-LOINCs aus. Python 3.10+, keine Zusatzpakete; standardmaessig

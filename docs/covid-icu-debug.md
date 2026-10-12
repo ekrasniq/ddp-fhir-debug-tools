@@ -1,5 +1,10 @@
 # COVID: ueber 3.000 Patienten in FHIR gegen 61 im DDP
 
+Fuer den naechsten Lauf mit den geprueften GitOps-Voreinstellungen und nativer
+Location-ICU-Erkennung siehe [Nativer ICU-Gegencheck](covid-icu-native-next-run.md).
+Die folgenden Angaben beschreiben den urspruenglichen Kontaktart-Modus. Der
+gemeinsame Debugger unterstuetzt jetzt auch `--icu-detection native` bzw. `both`.
+
 Die neuen Python-Skripte untersuchen ausschliesslich die Komponente
 `cumulative.maxtreatmentlevel.data.ICU_undifferentiated`. Sie erkennen ICU wie
 angefordert ueber **Encounter.type mit
@@ -82,7 +87,9 @@ nur einmal geladen. Bei anonymem internem Zugriff `--auth none` verwenden.
   Betriebssystem-Tempverzeichnis angelegt und beim Ende entfernt. Fuer einen
   festgelegten Ablageort `--work-db /LOKALER/PFAD/icu-work.sqlite` verwenden.
   `--keep-work-db` behaelt sie, auch bei einem abgebrochenen Lauf. Existierende
-  Dateien werden nicht ueberschrieben; die Arbeitsdatei ist kein Resume-Cache.
+  Dateien werden nicht ueberschrieben. Vollstaendige Snapshots des neuen Formats
+  koennen mit `--reuse-work-db` read-only neu ausgewertet werden; Download-Resume
+  oder Wiederverwendung alter/unvollstaendiger Snapshots wird nicht unterstuetzt.
 - Fortschritt kommt auf stderr, der fertige aggregierte JSON-Bericht auf stdout.
   Bei HTTP-/Paging-Fehlern wird abgebrochen und kein fertiger Teilzaehler ausgegeben.
 - `--timeout 120` ist das Timeout pro HTTP-Anfrage. TLS-Pruefung bleibt aktiv.
@@ -188,8 +195,9 @@ Referenzmodell sind die lokal geprueften Upstream-Repositories bei **v0.5.7**:
 - [MiiEncounter/VN-Zugriff](https://github.com/mwtek/utilities/blob/v0.5.7/src/main/java/de/ukbonn/mwtek/utilities/fhir/resources/MiiEncounter.java)
 - [FHIR-Retrieval und Condition-Verknuepfung](https://github.com/mwtek/dashboarddataprocessor/blob/v0.5.7/src/main/java/de/ukbonn/mwtek/dashboard/misc/ResourceHandler.java)
 
-Das Heidelberger Image `V0.5.7-update.4` konnte nicht gegen seine Build-Quellen
-verifiziert werden. Der Bericht behauptet deshalb keine exakte Image-Reproduktion.
+Inzwischen wurden die relevanten Source-Archive des Build-Tags `V0.5.7-update.4`
+geprueft; siehe die neue Anleitung. Der laufende Registry-Digest/Pod wurde weiterhin
+nicht geprueft. Die alte Kontaktart-Gegenprobe ist keine exakte Image-Reproduktion.
 
 Nachgebildet werden insbesondere:
 
