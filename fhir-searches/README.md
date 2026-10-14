@@ -1,5 +1,22 @@
 # FHIR-Suchabfragen
 
+## Intensivstationaere Versorgungsstellenkontakte
+
+[`icu-vk-encounter-sample.http`](icu-vk-encounter-sample.http) liefert eine Seite
+mit maximal 20 Encounter-Ressourcen, die beide Kriterien erfuellen:
+Kontaktstufe `http://fhir.de/CodeSystem/Kontaktebene|versorgungsstellenkontakt`
+und Kontaktart `http://fhir.de/CodeSystem/kontaktart-de|intensivstationaer`.
+Die zwei `type`-Parameter werden gemaess
+[FHIR R4](https://hl7.org/fhir/R4/search.html#combining) mit UND verknuepft;
+eine Komma-Liste wuerde stattdessen ODER bedeuten.
+
+`fhirBaseUrl` und Authentifizierung lokal setzen. Die Anfrage ist ausschliesslich
+lesend und gibt `id,type,location` zur Inspektion aus, ohne COVID-, Datums-,
+Status- oder Location-Existenzfilter. Kein exakter Gesamtzaehler wird angefordert.
+Keine Zufallsstichprobe; die Treffer duerfen ein Location-Element besitzen oder
+nicht. Syntaktisch getestet, nicht gegen Klinik-Blaze ausgefuehrt. Ergebnisse
+bleiben im Kliniknetz; nur anonymisierte Location-Strukturen teilen.
+
 ## Encounter-Location-Stichprobe fuer Blaze
 
 [`encounter-location-sample.http`](encounter-location-sample.http) enthaelt drei

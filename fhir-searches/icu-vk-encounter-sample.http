@@ -1,0 +1,13 @@
+@fhirBaseUrl = https://FHIR-SERVER.EXAMPLE/fhir
+
+### Stichprobe: Versorgungsstellenkontakte mit Kontaktart intensivstationaer
+# Basis-URL ersetzen und die erforderliche Authentifizierung lokal ergaenzen.
+# Ausschliesslich lesend; keine Patientendaten oder Credentials in Git ablegen.
+# Die beiden wiederholten type-Parameter sind UND-verknuepft:
+# Kontaktstufe versorgungsstellenkontakt UND Kontaktart intensivstationaer.
+# Kein COVID-, Datums-, Status- oder Location-Existenzfilter.
+# _count=20 begrenzt eine Seite, keine Zufallsstichprobe und keine Gesamtzahl.
+# _elements zeigt insbesondere das rohe location-Element, sofern vorhanden.
+GET {{fhirBaseUrl}}/Encounter?type=http%3A%2F%2Ffhir.de%2FCodeSystem%2FKontaktebene%7Cversorgungsstellenkontakt&type=http%3A%2F%2Ffhir.de%2FCodeSystem%2Fkontaktart-de%7Cintensivstationaer&_count=20&_elements=id,type,location
+Accept: application/fhir+json
+Prefer: handling=strict

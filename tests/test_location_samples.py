@@ -13,6 +13,20 @@ SEARCHES = Path(__file__).resolve().parents[1] / "fhir-searches"
 
 
 class LocationSampleTests(unittest.TestCase):
+    def test_icu_vk_query_uses_and_between_level_and_contactart(self):
+        content = (SEARCHES / "icu-vk-encounter-sample.http").read_text(encoding="utf-8")
+        requests = [line for line in content.splitlines() if line.startswith("GET ")]
+        self.assertEqual(1, len(requests))
+        parsed = urlsplit(requests[0][4:].replace("{{fhirBaseUrl}}", "https://example.invalid/fhir"))
+        self.assertEqual("/fhir/Encounter", parsed.path)
+        query = parse_qs(parsed.query)
+        self.assertEqual([debug.CONTACT_LEVEL + "|versorgungsstellenkontakt",
+                          debug.CONTACT_ART + "|intensivstationaer"], query["type"])
+        self.assertEqual(["20"], query["_count"])
+        self.assertEqual(["id,type,location"], query["_elements"])
+        self.assertEqual({"type", "_count", "_elements"}, set(query))
+        self.assertIn("Prefer: handling=strict", content)
+
     def test_http_requests_are_small_strict_read_only_samples(self):
         content = (SEARCHES / "encounter-location-sample.http").read_text(encoding="utf-8")
         requests = [line for line in content.splitlines() if line.startswith("GET ")]
