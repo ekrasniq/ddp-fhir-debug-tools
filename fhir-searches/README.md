@@ -1,5 +1,45 @@
 # FHIR-Suchabfragen
 
+## Encounter-Location-Stichprobe fuer Blaze
+
+[`encounter-location-sample.http`](encounter-location-sample.http) enthaelt drei
+getrennt auszufuehrende, ausschliesslich lesende Anfragen. `fhirBaseUrl` und
+Authentifizierung lokal setzen. `_count=20` begrenzt jede Seite; keinen Vollabruf
+oder exakten Gesamtzaehler anfordern. Es ist keine Zufallsstichprobe.
+
+1. **ICU-Rohdaten:** 20 Kontakte mit Kontaktart `intensivstationaer`, Status
+   `finished`/`in-progress`, nur `id,type,location`. Ohne Location-Existenzfilter:
+   das tatsaechliche `entry[].resource.location` im Ergebnis ansehen.
+2. **Gezielt aus dem Snapshot:**
+   [`encounter-location-snapshot-sample.sql`](encounter-location-snapshot-sample.sql)
+   auf der lokalen `icu-native-work.sqlite` read-only ausfuehren, z.B. in einem
+   SQLite-Browser. Die Datei muss aus einem abgeschlossenen nativen Debug-Lauf
+   stammen. Die maximal 20 Encounter-IDs lokal als Komma-Liste in
+   `encounterIdsWithLocation` einsetzen und Anfrage 2 starten. Die SQL-Abfrage
+   waehlt ICU-VK mit nichtleerem Location-Element, aber ohne vom Debugger
+   verwertbare Location-ID. Aktuelle FHIR-Daten koennen inzwischen abweichen.
+3. **Optionaler Standardfilter-Test:** `location:missing=false` mit
+   `Prefer: handling=strict`. Die aktuelle
+   [Blaze-Suchdokumentation](https://blaze-server.org/api/interaction/search-type.html#implemented-modifiers)
+   listet `:missing` nicht als implementiert. Ein HTTP 400/OperationOutcome ist
+   deshalb kein Nachweis fuer fehlende Locations. Ohne strikte Fehlerbehandlung
+   kann Blaze nicht unterstuetzte Parameter ignorieren. Die installierte
+   Klinikversion wurde nicht getestet.
+
+Wichtig ist der Unterschied zwischen dem aeusseren `Encounter.location` (einem
+BackboneElement mit z.B. `physicalType` oder `period`), der darin liegenden
+Referenz `Encounter.location[].location` und einer separaten `Location`-Ressource.
+Der [R4-Suchparameter `location`](https://hl7.org/fhir/R4/encounter.html#search)
+bezieht sich auf die Referenz, nicht auf das gesamte aeussere Element.
+Ein nichtleeres aeusseres Element kann den DDP-Kontaktart-Fallback verhindern,
+obwohl es keine verwertbare Location-Referenz gibt. Diese Mappingsituation ist
+zu pruefen, nicht allein aus den Zaehlern bewiesen. Siehe auch
+[native DDP-Logik](../docs/covid-icu-native-next-run.md#verifizierte-modellbesonderheiten).
+
+Nur das anonymisierte `location`-Array teilen, nicht komplette Encounter,
+IDs oder Credentials. Keine Resultate in Git ablegen. Syntax und SQL-Selektion
+werden synthetisch getestet; keine Anfrage gegen Klinik-Blaze ausgefuehrt.
+
 ## COVID-Patient:innen mit intensivstationaerer Versorgung
 
 Die ausfuehrbare HTTP-Abfrage steht in

@@ -1,0 +1,35 @@
+@fhirBaseUrl = https://FHIR-SERVER.EXAMPLE/fhir
+@encounterIdsWithLocation = REPLACE-WITH-LOCAL-ENCOUNTER-ID
+
+# Ausschliesslich lesende Stichproben; keine COVID- oder DDP-Zaehlerabfrage.
+# Basis-URL und Authentifizierung lokal setzen, keine Credentials committen.
+# _count=20 begrenzt die Seite, nicht den gesamten serverseitigen Suchaufwand.
+# Kein _total=accurate: fuer die Stichprobe keinen exakten Gesamtzaehler anfordern.
+# Jede Anfrage einzeln starten. Keine Zufallsstichprobe, keine Aussage ueber alle Encounter.
+
+### 1. Blaze: 20 ICU-Kontakte, rohes location-Element inspizieren
+# KEIN Existenzfilter: Treffer koennen location haben oder nicht.
+# Auch nur physicalType/period/display/identifier im location-Element sind wichtig:
+# Ein solches Element kann den DDP-Kontaktart-Fallback blockieren, obwohl keine
+# separate Location-Ressource bzw. keine Location/...-Referenz existiert.
+GET {{fhirBaseUrl}}/Encounter?type=http%3A%2F%2Ffhir.de%2FCodeSystem%2Fkontaktart-de%7Cintensivstationaer&status=finished,in-progress&_count=20&_elements=id,type,location
+Accept: application/fhir+json
+Prefer: handling=strict
+
+### 2. Gezielt: im vorhandenen Debug-Snapshot als has_location=1 erkannte VK
+# IDs aus encounter-location-snapshot-sample.sql lokal einsetzen (Komma-Liste).
+# Das sind IDs von Encounter-Ressourcen, nicht von Location-Ressourcen.
+# Aktuelle FHIR-Ressourcen koennen vom damaligen Snapshot abweichen.
+GET {{fhirBaseUrl}}/Encounter?_id={{encounterIdsWithLocation}}&_count=20&_elements=id,type,location
+Accept: application/fhir+json
+Prefer: handling=strict
+
+### 3. OPTIONAL: Standard-FHIR-Existenzfilter auf den Location-Suchparameter
+# In der aktuellen Blaze-Dokumentation ist :missing NICHT als implementiert gelistet.
+# Nur als gezielten Unterstuetzungstest verwenden. HTTP 400/OperationOutcome
+# bedeutet nicht "keine Locations". Ohne strict koennte Blaze den Filter ignorieren.
+# Auch bei Unterstuetzung prueft dies Encounter.location.location, nicht beliebige
+# Inhalte des aeusseren Encounter.location-Elements (z.B. nur physicalType/period).
+GET {{fhirBaseUrl}}/Encounter?location:missing=false&_count=20&_elements=id,type,location
+Accept: application/fhir+json
+Prefer: handling=strict
